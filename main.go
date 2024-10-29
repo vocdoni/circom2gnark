@@ -10,6 +10,8 @@ import (
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
+	"github.com/consensys/gnark/logger"
+	"github.com/rs/zerolog"
 
 	"github.com/consensys/gnark-crypto/ecc"
 
@@ -19,6 +21,10 @@ import (
 
 	"github.com/vocdoni/circomgnark/parser"
 )
+
+func init() {
+	logger.Logger().Level(zerolog.DebugLevel)
+}
 
 func main() {
 	// Load proof.json
@@ -67,6 +73,10 @@ func main() {
 	if err != nil {
 		fmt.Printf("Error converting public inputs: %v\n", err)
 		return
+	}
+
+	for i, elem := range publicInputs {
+		fmt.Printf("Public input %d: %v\n", i, elem)
 	}
 
 	// Convert proof to Gnark format
@@ -120,6 +130,10 @@ func main() {
 		publicInputElementsEmulated[i] = elem
 	}
 
+	for i, elem := range publicInputElementsEmulated {
+		fmt.Printf("Public input emulated %d: %v\n", i, elem)
+	}
+
 	recursionPublicInputs := stdgroth16.Witness[sw_bn254.ScalarField]{
 		Public: publicInputElementsEmulated,
 	}
@@ -151,6 +165,12 @@ func main() {
 		VerifyingKey: placeholderVk,
 		PublicInputs: placeholderWitness,
 	}
+
+	fmt.Printf("Placeholder VK G1.K length: %d\n", len(placeholderVk.G1.K))
+	fmt.Printf("Actual VK G1.K length: %d\n", len(recursionVk.G1.K))
+
+	fmt.Printf("Placeholder Witness Public length: %d\n", len(placeholderWitness.Public))
+	fmt.Printf("Actual Witness Public length: %d\n", len(recursionPublicInputs.Public))
 
 	// Compile the circuit
 	startTime := time.Now()
