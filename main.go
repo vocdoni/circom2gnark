@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/consensys/gnark-crypto/ecc"
-	fr_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/backend/witness"
 	"github.com/consensys/gnark/constraint"
@@ -155,15 +154,15 @@ func main() {
 	nbPublic := len(gnarkVk.G1.K) // gnarkVk is your converted verification key
 
 	// Create a channel to send the public input values
-	values := make(chan any, nbPublic)
+	values := make(chan any, len(publicInputs))
 	defer close(values)
 
 	fmt.Printf("filling witness with %d public inputs\n", nbPublic)
 
 	go func() {
 		// Send the one wire value (1) first
-		one := fr_bn254.One()
-		values <- one
+		//one := fr_bn254.One()
+		//values <- one
 
 		// Then send the public inputs
 		for i, input := range publicInputs {
@@ -174,7 +173,7 @@ func main() {
 	}()
 
 	// Fill the witness
-	err = w.Fill(int(nbPublic), 0, values)
+	err = w.Fill(len(publicInputs), 0, values)
 	if err != nil {
 		fmt.Printf("Error filling witness: %v\n", err)
 		return
