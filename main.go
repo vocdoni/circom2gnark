@@ -3,18 +3,18 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"os"
 	"time"
 
+	"github.com/consensys/gnark-crypto/ecc"
+	fr_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/consensys/gnark/backend/groth16"
+	"github.com/consensys/gnark/backend/witness"
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark/logger"
 	"github.com/rs/zerolog"
-
-	"github.com/consensys/gnark-crypto/ecc"
 
 	"github.com/consensys/gnark/std/algebra/emulated/sw_bn254"
 	"github.com/consensys/gnark/std/math/emulated"
@@ -123,30 +123,79 @@ func main() {
 		return
 	}
 
-	// Transform the public inputs to emulated elements for the recursion circuit
-	publicInputElementsEmulated := make([]emulated.Element[sw_bn254.ScalarField], len(publicInputs))
-	for i, input := range publicInputs {
-		bigIntValue := input.BigInt(new(big.Int))
-		elem := emulated.ValueOf[sw_bn254.ScalarField](bigIntValue)
-		publicInputElementsEmulated[i] = elem
+	/*
+		// Transform the public inputs to emulated elements for the recursion circuit
+		publicInputElementsEmulated := make([]emulated.Element[sw_bn254.ScalarField], len(publicInputs))
+		for i, input := range publicInputs {
+			bigIntValue := input.BigInt(new(big.Int))
+			elem := emulated.ValueOf[sw_bn254.ScalarField](bigIntValue)
+			publicInputElementsEmulated[i] = elem
+		}
+
+		for i, elem := range publicInputElementsEmulated {
+			fmt.Printf("Public input emulated %d: %v\n", i, elem)
+		}
+
+		recursionPublicInputs := stdgroth16.Witness[sw_bn254.ScalarField]{
+			Public: publicInputElementsEmulated,
+		}
+	*/
+
+	// CREATE THE WITNESS
+
+	// Inside your main function or appropriate scope
+	// Create a new witness
+	w, err := witness.New(ecc.BN254.ScalarField())
+	if err != nil {
+		fmt.Printf("Error creating witness: %v\n", err)
+		return
 	}
 
-	for i, elem := range publicInputElementsEmulated {
-		fmt.Printf("Public input emulated %d: %v\n", i, elem)
+	// Total number of public variables, including one wire
+	nbPublic := len(gnarkVk.G1.K) // gnarkVk is your converted verification key
+
+	// Create a channel to send the public input values
+	values := make(chan any, nbPublic)
+	defer close(values)
+
+	fmt.Printf("filling witness with %d public inputs\n", nbPublic)
+
+	go func() {
+		// Send the one wire value (1) first
+		one := fr_bn254.One()
+		values <- one
+
+		// Then send the public inputs
+		for i, input := range publicInputs {
+			fmt.Printf("Sending public input %d: %v\n", i+1, input)
+			values <- input
+		}
+		close(values)
+	}()
+
+	// Fill the witness
+	err = w.Fill(int(nbPublic), 0, values)
+	if err != nil {
+		fmt.Printf("Error filling witness: %v\n", err)
+		return
+	}
+	fmt.Printf("Witness filled with %d public inputs\n", nbPublic)
+
+	// Now, create the recursion public inputs
+	recursionPublicInputs, err := stdgroth16.ValueOfWitness[sw_bn254.ScalarField](w)
+	if err != nil {
+		fmt.Printf("Error creating recursion public inputs: %v\n", err)
+		return
 	}
 
-	recursionPublicInputs := stdgroth16.Witness[sw_bn254.ScalarField]{
-		Public: publicInputElementsEmulated,
-	}
-
-	// Step 1: Determine the number of public inputs
-	numPublicInputs := len(recursionPublicInputs.Public)
+	// Step 1: Determine the number of public inputs (excluding the one wire)
+	numPublicInputs := len(gnarkVk.G1.K) - 1
 	fmt.Printf("Number of public inputs: %d\n", numPublicInputs)
 
 	// Step 2: Create placeholder verifying key
 	placeholderVk := stdgroth16.VerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl]{
 		G1: struct{ K []sw_bn254.G1Affine }{
-			K: make([]sw_bn254.G1Affine, len(recursionVk.G1.K)),
+			K: make([]sw_bn254.G1Affine, len(gnarkVk.G1.K)),
 		},
 		G2: struct {
 			GammaNeg, DeltaNeg sw_bn254.G2Affine
@@ -154,11 +203,6 @@ func main() {
 		E:                            sw_bn254.GTEl{},
 		CommitmentKeys:               nil,
 		PublicAndCommitmentCommitted: nil,
-	}
-
-	// Initialize placeholder G1.K elements with dummy values
-	for i := range placeholderVk.G1.K {
-		placeholderVk.G1.K[i] = sw_bn254.G1Affine{}
 	}
 
 	// Step 3: Create placeholder witness
