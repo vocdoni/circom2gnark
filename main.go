@@ -15,7 +15,6 @@ import (
 	"github.com/consensys/gnark/logger"
 	"github.com/rs/zerolog"
 
-	fr_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/consensys/gnark/std/algebra/emulated/sw_bn254"
 	"github.com/consensys/gnark/std/math/emulated"
 	stdgroth16 "github.com/consensys/gnark/std/recursion/groth16"
@@ -151,18 +150,17 @@ func main() {
 	}
 
 	// Total number of public variables, including one wire
-	nbPublic := len(gnarkVk.G1.K) // gnarkVk is your converted verification key
+	nbPublic := len(gnarkVk.G1.K)
 
 	// Create a channel to send the public input values
 	values := make(chan any, nbPublic)
-	defer close(values)
 
-	fmt.Printf("filling witness with %d public inputs\n", nbPublic)
+	fmt.Printf("filling witness with %d public inputs\n", len(publicInputs))
 
 	go func() {
 		// Send the one wire value (1) first
-		one := fr_bn254.One()
-		values <- one
+		//one := fr_bn254.One()
+		//values <- one
 
 		// Then send the public inputs
 		for i, input := range publicInputs {
@@ -173,12 +171,12 @@ func main() {
 	}()
 
 	// Fill the witness
-	err = w.Fill(nbPublic, 0, values)
+	err = w.Fill(len(publicInputs), 0, values)
 	if err != nil {
 		fmt.Printf("Error filling witness: %v\n", err)
 		return
 	}
-	fmt.Printf("Witness filled with %d public inputs\n", nbPublic)
+	fmt.Printf("Witness filled with %d public inputs\n", len(publicInputs))
 
 	// Now, create the recursion public inputs
 	recursionPublicInputs, err := stdgroth16.ValueOfWitness[sw_bn254.ScalarField](w)
@@ -188,21 +186,29 @@ func main() {
 	}
 
 	// Step 2: Create placeholder verifying key
-	placeholderVk := stdgroth16.VerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl]{
-		G1: struct{ K []sw_bn254.G1Affine }{
-			K: make([]sw_bn254.G1Affine, len(gnarkVk.G1.K)),
-		},
-		G2: struct {
-			GammaNeg, DeltaNeg sw_bn254.G2Affine
-		}{},
-		E:                            sw_bn254.GTEl{},
-		CommitmentKeys:               nil,
-		PublicAndCommitmentCommitted: nil,
+	/*	placeholderVk := stdgroth16.VerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl]{
+			G1: struct{ K []sw_bn254.G1Affine }{
+				K: make([]sw_bn254.G1Affine, len(gnarkVk.G1.K)),
+			},
+			G2: struct {
+				GammaNeg, DeltaNeg sw_bn254.G2Affine
+			}{},
+			E:                            sw_bn254.GTEl{},
+			CommitmentKeys:               nil,
+			PublicAndCommitmentCommitted: nil,
+		}
+	*/
+
+	placeholderVk, err := stdgroth16.ValueOfVerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl](gnarkVk)
+	if err != nil {
+		fmt.Printf("Failed to convert verification key to recursion verification key: %v\n", err)
+		return
 	}
+	placeholderVk.G1.K = make([]sw_bn254.G1Affine, len(placeholderVk.G1.K))
 
 	// Step 3: Create placeholder witness
 	placeholderWitness := stdgroth16.Witness[sw_bn254.ScalarField]{
-		Public: make([]emulated.Element[sw_bn254.ScalarField], nbPublic),
+		Public: make([]emulated.Element[sw_bn254.ScalarField], len(publicInputs)),
 	}
 
 	// Step 4: Create placeholder circuit
