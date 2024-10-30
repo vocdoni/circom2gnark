@@ -15,10 +15,8 @@ import (
 	bn254fr "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 
 	// Import algebra types for BN254
-	"github.com/consensys/gnark/std/algebra/emulated/sw_bn254"
 
 	// Import recursion package for VerifyingKey and Proof types
-	recursion "github.com/consensys/gnark/std/recursion/groth16"
 
 	groth16_bn254 "github.com/consensys/gnark/backend/groth16/bn254"
 )
@@ -256,17 +254,5 @@ func VerifyProof(gnarkProof *groth16_bn254.Proof, vk *groth16_bn254.VerifyingKey
 	if err != nil {
 		return false, fmt.Errorf("proof verification failed: %v", err)
 	}
-
-	// Convert the proof and verification key to recursion types (to check compatibility)
-	_, err = recursion.ValueOfProof[sw_bn254.G1Affine, sw_bn254.G2Affine](gnarkProof)
-	if err != nil {
-		return false, fmt.Errorf("failed to convert proof to recursion proof: %v", err)
-	}
-
-	_, err = recursion.ValueOfVerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl](vk)
-	if err != nil {
-		return false, fmt.Errorf("failed to convert verification key to recursion verification key: %v", err)
-	}
-
 	return true, nil
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -13,11 +14,11 @@ import (
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark/logger"
-	"github.com/rs/zerolog"
-
 	"github.com/consensys/gnark/std/algebra/emulated/sw_bn254"
 	"github.com/consensys/gnark/std/math/emulated"
 	stdgroth16 "github.com/consensys/gnark/std/recursion/groth16"
+	"github.com/consensys/gnark/test"
+	"github.com/rs/zerolog"
 	"github.com/vocdoni/circomgnark/parser"
 )
 
@@ -26,6 +27,9 @@ func init() {
 }
 
 func main() {
+	runtest := false
+	flag.BoolVar(&runtest, "test", false, "Run as test")
+	flag.Parse()
 	// Load proof.json
 	proofData, err := os.ReadFile("proof.json")
 	if err != nil {
@@ -229,6 +233,22 @@ func main() {
 	var pk groth16.ProvingKey
 	var vk groth16.VerifyingKey
 
+	// Check if we are running as a test
+	if runtest {
+		// Create the circuit assignment with actual values
+		circuitAssignment := &VerifyCircomProofCircuit{
+			Proof:        recursionProof,
+			VerifyingKey: recursionVk,
+			PublicInputs: recursionPublicInputs,
+		}
+
+		err = test.IsSolved(placeholderCircuit, circuitAssignment, ecc.BN254.ScalarField())
+		if err != nil {
+			panic(err)
+		}
+		return
+	}
+
 	// Check if the files exist
 	if _, err := os.Stat("pk.bin"); err == nil {
 		// Files exist, load them
@@ -416,5 +436,5 @@ func (c *VerifyCircomProofCircuit) Define(api frontend.API) error {
 	if err != nil {
 		return fmt.Errorf("new verifier: %w", err)
 	}
-	return verifier.AssertProof(c.VerifyingKey, c.Proof, c.PublicInputs)
+	return verifier.AssertProof(c.VerifyingKey, c.Proof, c.PublicInputs, stdgroth16.WithCompleteArithmetic())
 }
