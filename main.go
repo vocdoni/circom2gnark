@@ -3,12 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"math/big"
 	"os"
 	"time"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/groth16"
-	"github.com/consensys/gnark/backend/witness"
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
@@ -16,7 +17,6 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/consensys/gnark/std/algebra/emulated/sw_bn254"
-	"github.com/consensys/gnark/std/math/emulated"
 	stdgroth16 "github.com/consensys/gnark/std/recursion/groth16"
 	"github.com/vocdoni/circomgnark/parser"
 )
@@ -107,20 +107,6 @@ func main() {
 		return
 	}
 
-	fmt.Printf("Transforming proof and verification key to recursion types...\n")
-	// Convert the proof and verification key to recursion types
-	recursionProof, err := stdgroth16.ValueOfProof[sw_bn254.G1Affine, sw_bn254.G2Affine](gnarkProof)
-	if err != nil {
-		fmt.Printf("Failed to convert proof to recursion proof: %v\n", err)
-		return
-	}
-
-	recursionVk, err := stdgroth16.ValueOfVerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl](gnarkVk)
-	if err != nil {
-		fmt.Printf("Failed to convert verification key to recursion verification key: %v\n", err)
-		return
-	}
-
 	/*
 		// Transform the public inputs to emulated elements for the recursion circuit
 		publicInputElementsEmulated := make([]emulated.Element[sw_bn254.ScalarField], len(publicInputs))
@@ -143,47 +129,80 @@ func main() {
 
 	// Inside your main function or appropriate scope
 	// Create a new witness
-	w, err := witness.New(ecc.BN254.ScalarField())
+	//w, err := witness.New(ecc.BN254.ScalarField())
+	//if err != nil {
+	//	fmt.Printf("Error creating witness: %v\n", err)
+	//	return
+	//}
+
+	innerCs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &InnerCircuit{})
 	if err != nil {
-		fmt.Printf("Error creating witness: %v\n", err)
+		fmt.Printf("Error compiling inner circuit: %v\n", err)
 		return
 	}
 
-	// Total number of public variables, including one wire
-	nbPublic := len(gnarkVk.G1.K)
+	for i, c := range publicInputs {
+		z := new(big.Int)
+		c.BigInt(z)
+		fmt.Printf("Public input %d: %v / %s\n", i, c, z.String())
+	}
 
-	// Create a channel to send the public input values
-	values := make(chan any, nbPublic)
-
-	fmt.Printf("filling witness with %d public inputs\n", len(publicInputs))
-
-	go func() {
-		// Send the one wire value (1) first
-		//one := fr_bn254.One()
-		//values <- one
-
-		// Then send the public inputs
-		for i, input := range publicInputs {
-			fmt.Printf("Sending public input %d: %v\n", i+1, input)
-			values <- input
+	formatCipherFields := func() [32]frontend.Variable {
+		var formattedCipherFields [32]frontend.Variable
+		starter := 9
+		for i := starter; i < starter+32; i++ {
+			formattedCipherFields[i-starter] = publicInputs[i]
 		}
-		close(values)
-	}()
-
-	// Fill the witness
-	err = w.Fill(len(publicInputs), 0, values)
-	if err != nil {
-		fmt.Printf("Error filling witness: %v\n", err)
-		return
+		return formattedCipherFields
 	}
-	fmt.Printf("Witness filled with %d public inputs\n", len(publicInputs))
 
-	// Now, create the recursion public inputs
-	recursionPublicInputs, err := stdgroth16.ValueOfWitness[sw_bn254.ScalarField](w)
+	w, err := frontend.NewWitness(&InnerCircuit{
+		MaxCount:        publicInputs[0],
+		ForceUniqueness: publicInputs[1],
+		MaxValue:        publicInputs[2],
+		MinValue:        publicInputs[3],
+		MaxTotalCost:    publicInputs[4],
+		MinTotalCost:    publicInputs[5],
+		CostExp:         publicInputs[6],
+		CostFromWeight:  publicInputs[7],
+		Weight:          publicInputs[8],
+		Cipherfields:    formatCipherFields(),
+		Nullifier:       publicInputs[41],
+	}, ecc.BN254.ScalarField())
 	if err != nil {
-		fmt.Printf("Error creating recursion public inputs: %v\n", err)
-		return
+		log.Fatalf("Error creating witness: %v\n", err)
 	}
+	/*
+
+		// Total number of public variables, including one wire
+		nbPublic := len(gnarkVk.G1.K)
+
+		// Create a channel to send the public input values
+		values := make(chan any, nbPublic)
+
+		fmt.Printf("filling witness with %d public inputs\n", len(publicInputs))
+
+		go func() {
+			// Send the one wire value (1) first
+			//one := fr_bn254.One()
+			//values <- one
+
+			// Then send the public inputs
+			for i, input := range publicInputs {
+				fmt.Printf("Sending public input %d: %v\n", i+1, input)
+				values <- input
+			}
+			close(values)
+		}()
+
+		// Fill the witness
+		err = w.Fill(len(publicInputs), 0, values)
+		if err != nil {
+			fmt.Printf("Error filling witness: %v\n", err)
+			return
+		}
+		fmt.Printf("Witness filled with %d public inputs\n", len(publicInputs))
+	*/
 
 	// Step 2: Create placeholder verifying key
 	/*	placeholderVk := stdgroth16.VerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl]{
@@ -207,22 +226,16 @@ func main() {
 	placeholderVk.G1.K = make([]sw_bn254.G1Affine, len(placeholderVk.G1.K))
 
 	// Step 3: Create placeholder witness
-	placeholderWitness := stdgroth16.Witness[sw_bn254.ScalarField]{
-		Public: make([]emulated.Element[sw_bn254.ScalarField], len(publicInputs)),
-	}
+	//placeholderWitness := stdgroth16.Witness[sw_bn254.ScalarField]{
+	//	Public: make([]emulated.Element[sw_bn254.ScalarField], len(publicInputs)),
+	//}
+	placeholderWitness := stdgroth16.PlaceholderWitness[sw_bn254.ScalarField](innerCs)
 
 	// Step 4: Create placeholder circuit
 	placeholderCircuit := &VerifyCircomProofCircuit{
-		Proof:        stdgroth16.Proof[sw_bn254.G1Affine, sw_bn254.G2Affine]{},
-		VerifyingKey: placeholderVk,
+		VerifyingKey: stdgroth16.PlaceholderVerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl](innerCs),
 		PublicInputs: placeholderWitness,
 	}
-
-	fmt.Printf("Placeholder VK G1.K length: %d\n", len(placeholderVk.G1.K))
-	fmt.Printf("Actual VK G1.K length: %d\n", len(recursionVk.G1.K))
-
-	fmt.Printf("Placeholder Witness Public length: %d\n", len(placeholderWitness.Public))
-	fmt.Printf("Actual Witness Public length: %d\n", len(recursionPublicInputs.Public))
 
 	// Initialize variables for ccs, pk, vk
 	var ccs constraint.ConstraintSystem
@@ -247,6 +260,33 @@ func main() {
 			return
 		}
 	}
+
+	fmt.Printf("Transforming proof and verification key to recursion types...\n")
+	// Convert the proof and verification key to recursion types
+	recursionProof, err := stdgroth16.ValueOfProof[sw_bn254.G1Affine, sw_bn254.G2Affine](gnarkProof)
+	if err != nil {
+		fmt.Printf("Failed to convert proof to recursion proof: %v\n", err)
+		return
+	}
+
+	recursionVk, err := stdgroth16.ValueOfVerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl](gnarkVk)
+	if err != nil {
+		fmt.Printf("Failed to convert verification key to recursion verification key: %v\n", err)
+		return
+	}
+
+	// Now, create the recursion public inputs
+	recursionPublicInputs, err := stdgroth16.ValueOfWitness[sw_bn254.ScalarField](w)
+	if err != nil {
+		fmt.Printf("Error creating recursion public inputs: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Placeholder VK G1.K length: %d\n", len(placeholderVk.G1.K))
+	fmt.Printf("Actual VK G1.K length: %d\n", len(recursionVk.G1.K))
+
+	fmt.Printf("Placeholder Witness Public length: %d\n", len(placeholderWitness.Public))
+	fmt.Printf("Actual Witness Public length: %d\n", len(recursionPublicInputs.Public))
 
 	// Create the circuit assignment with actual values
 	circuitAssignment := &VerifyCircomProofCircuit{
@@ -408,7 +448,7 @@ func LoadCircuit() (constraint.ConstraintSystem, groth16.ProvingKey, groth16.Ver
 type VerifyCircomProofCircuit struct {
 	Proof        stdgroth16.Proof[sw_bn254.G1Affine, sw_bn254.G2Affine]
 	VerifyingKey stdgroth16.VerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl]
-	PublicInputs stdgroth16.Witness[sw_bn254.ScalarField] `gnark:",public"`
+	PublicInputs stdgroth16.Witness[sw_bn254.ScalarField] `gnark:"publicInputs,public"`
 }
 
 func (c *VerifyCircomProofCircuit) Define(api frontend.API) error {
@@ -417,4 +457,22 @@ func (c *VerifyCircomProofCircuit) Define(api frontend.API) error {
 		return fmt.Errorf("new verifier: %w", err)
 	}
 	return verifier.AssertProof(c.VerifyingKey, c.Proof, c.PublicInputs)
+}
+
+type InnerCircuit struct {
+	MaxCount        frontend.Variable     `gnark:"max_count,public"`
+	ForceUniqueness frontend.Variable     `gnark:"force_uniqueness,public"`
+	MaxValue        frontend.Variable     `gnark:"max_value,public"`
+	MinValue        frontend.Variable     `gnark:"min_value,public"`
+	MaxTotalCost    frontend.Variable     `gnark:"max_total_cost,public"`
+	MinTotalCost    frontend.Variable     `gnark:"min_total_cost,public"`
+	CostExp         frontend.Variable     `gnark:"cost_exp,public"`
+	CostFromWeight  frontend.Variable     `gnark:"cost_from_weight,public"`
+	Weight          frontend.Variable     `gnark:"weight,public"`
+	Cipherfields    [32]frontend.Variable `gnark:"cipherfields,public"` // 8 ballot fields * (c1/c2) * (x/y)
+	Nullifier       frontend.Variable     `gnark:"nullifier,public"`
+}
+
+func (c *InnerCircuit) Define(api frontend.API) error {
+	return nil
 }

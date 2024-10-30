@@ -168,6 +168,18 @@ func ParsePublicInputs(publicSignals []string) ([]bn254fr.Element, error) {
 	return publicInputs, nil
 }
 
+func ParsePublicInputsAsBigInt(publicSignals []string) ([]*big.Int, error) {
+	publicInputs := []*big.Int{}
+	for i, s := range publicSignals {
+		bi, err := stringToBigInt(s)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse public input %d: %v", i, err)
+		}
+		publicInputs = append(publicInputs, bi)
+	}
+	return publicInputs, nil
+}
+
 // ConvertProof converts a SnarkJSProof into a Gnark-compatible Proof structure.
 func ConvertProof(snarkProof *SnarkJSProof) (*groth16_bn254.Proof, error) {
 	// Parse PiA (G1 point)
