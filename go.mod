@@ -1,4 +1,4 @@
-module github.com/vocdoni/circomgnark
+module github.com/vocdoni/circom2gnark
 
 go 1.23.2
 

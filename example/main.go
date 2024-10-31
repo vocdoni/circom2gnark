@@ -15,27 +15,30 @@ import (
 	"github.com/consensys/gnark/std/algebra/emulated/sw_bn254"
 	stdgroth16 "github.com/consensys/gnark/std/recursion/groth16"
 	"github.com/consensys/gnark/test"
-	"github.com/vocdoni/circomgnark/parser"
+	"github.com/vocdoni/circom2gnark/parser"
 )
 
 func main() {
 	runtest := false
+	circomDataDir := "circom_data"
 	flag.BoolVar(&runtest, "test", false, "Run as test")
+	flag.StringVar(&circomDataDir, "circom-data", "circom_data", "Directory containing the Circom JSON data files")
 	flag.Parse()
+
 	// Load proof.json
-	proofData, err := os.ReadFile("proof.json")
+	proofData, err := os.ReadFile(fmt.Sprintf("%s/proof.json", circomDataDir))
 	if err != nil {
 		log.Fatalf("failed to read proof: %v", err)
 	}
 
 	// Load vkey.json
-	vkData, err := os.ReadFile("vkey.json")
+	vkData, err := os.ReadFile(fmt.Sprintf("%s/vkey.json", circomDataDir))
 	if err != nil {
 		log.Fatalf("failed to read vkey: %v", err)
 	}
 
 	// Load public signals
-	publicSignalsData, err := os.ReadFile("public_signals.json")
+	publicSignalsData, err := os.ReadFile(fmt.Sprintf("%s/public_signals.json", circomDataDir))
 	if err != nil {
 		log.Fatalf("failed to read public signals: %v", err)
 	}
@@ -56,6 +59,27 @@ func main() {
 		log.Fatalf("failed to unmarshal public signals: %v", err)
 	}
 
+	// Verify the proof outside a recursive circuit
+
+	fmt.Println("Verifying proof with Gnark verifier...")
+	gnarkProof, err := parser.ConvertCircomToGnark(snarkProof, snarkVk, publicSignals)
+	if err != nil {
+		log.Fatalf("failed to convert Circom proof to Gnark proof: %v", err)
+	}
+
+	verified, err := parser.VerifyProof(gnarkProof)
+	if err != nil {
+		log.Fatalf("failed to verify proof: %v", err)
+	}
+	if !verified {
+		log.Fatalf("proof verification failed")
+	}
+	fmt.Println("Proof verification succeeded!")
+
+	// Recursive proof verification
+	fmt.Println("Now let's build a new circuit to verify the Circom proof recursively")
+
+	// Get the recursion proof and placeholders
 	recursionData, recursionPlaceholders, err := parser.ConvertCircomToGnarkRecursion(snarkProof, snarkVk, publicSignals)
 	if err != nil {
 		log.Fatalf("failed to convert Circom proof to Gnark recursion proof: %v", err)
