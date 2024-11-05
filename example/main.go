@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -11,8 +12,8 @@ import (
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
-	"github.com/consensys/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark/std/algebra/emulated/sw_bn254"
+	"github.com/consensys/gnark/std/algebra/native/sw_bls12377"
 	stdgroth16 "github.com/consensys/gnark/std/recursion/groth16"
 	"github.com/consensys/gnark/test"
 	"github.com/vocdoni/circom2gnark/parser"
@@ -113,22 +114,18 @@ func main() {
 		return
 	}
 
-	// Check if the files exist
-	if _, err := os.Stat("pk.bin"); err == nil {
-		// Files exist, load them
-		fmt.Println("Found existing pk.bin, vk.bin, and circuit.r1cs. Loading them...")
-		ccs, pk, vk, err = LoadCircuit()
-		if err != nil {
-			fmt.Printf("Failed to load circuit: %v\n", err)
-			return
-		}
-	} else {
-		// Files do not exist, compile the circuit
-		fmt.Println("Compiling circuit...")
-		ccs, pk, vk, err = CompileCircuit(placeholderCircuit)
-		if err != nil {
-			fmt.Printf("Failed to compile circuit: %v\n", err)
-			return
+	// Check if the circuit files exist, else compile the circuit and write the files
+	ccs, pk, vk, err = LoadCircuit(ecc.BLS12_377, VerifyCircomProofCircuitType)
+	if err != nil {
+		if errors.Is(err, ErrCircuitDoesNotExist) {
+			// Files do not exist, compile the circuit
+			fmt.Println("Compiling circuit...")
+			ccs, pk, vk, err = CompileCircuit(placeholderCircuit, ecc.BLS12_377.ScalarField(), VerifyCircomProofCircuitType)
+			if err != nil {
+				log.Fatalf("Failed to compile circuit: %v", err)
+			}
+		} else {
+			log.Fatalf("Failed to load circuit: %v", err)
 		}
 	}
 
@@ -142,24 +139,86 @@ func main() {
 	// Create the witness
 	startTime := time.Now()
 	fmt.Println("Creating witness...")
-	witnessFull, err := frontend.NewWitness(circuitAssignment, ecc.BN254.ScalarField())
+	witnessFull, err := frontend.NewWitness(circuitAssignment, ecc.BLS12_377.ScalarField())
 	if err != nil {
 		fmt.Printf("Failed to create witness: %v\n", err)
 		return
 	}
-
-	// Create the public witness
-	publicWitness, err := witnessFull.Public()
-	if err != nil {
-		fmt.Printf("Failed to create public witness: %v\n", err)
-		return
-	}
 	fmt.Printf("Witness creation time: %v\n", time.Since(startTime))
 
-	// Create the proof
-	fmt.Println("Proving...")
+	// Create the proofs for the aggregate recursion circuit
+	aggregateProofCircuitVk, err := stdgroth16.ValueOfVerifyingKey[sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT](vk)
+	if err != nil {
+		log.Fatalf("Failed to convert verification key to recursion verification key: %v", err)
+	}
+	aggregateCircuitData := &AggregateProofCircuit{
+		VerifyingKey: aggregateProofCircuitVk,
+	}
+	for i := 0; i < 10; i++ {
+		fmt.Printf("Creating proof %d...", i)
+		startTime = time.Now()
+		proof, err := groth16.Prove(ccs, pk, witnessFull)
+		if err != nil {
+			fmt.Printf("Proving failed: %v\n", err)
+			return
+		}
+		fmt.Printf("Proving Recursion time: %v\n", time.Since(startTime))
+
+		publicWitness, err := witnessFull.Public()
+		if err != nil {
+			log.Fatalf("Failed to create public witness: %v\n", err)
+		}
+
+		proofData := BatchProofData{}
+		if proofData.PublicInputs, err = stdgroth16.ValueOfWitness[sw_bls12377.ScalarField](publicWitness); err != nil {
+			log.Fatal(err)
+		}
+		if proofData.Proof, err = stdgroth16.ValueOfProof[sw_bls12377.G1Affine, sw_bls12377.G2Affine](proof); err != nil {
+			log.Fatal(err)
+		}
+		aggregateCircuitData.Proofs[i] = proofData
+	}
+
+	// Generate the aggregation proof
+
+	fmt.Println("Creating witness for final aggregation proof...")
+	witnessFull2, err := frontend.NewWitness(aggregateCircuitData, ecc.BW6_761.ScalarField())
+	if err != nil {
+		log.Fatalf("Failed to create witness: %v", err)
+	}
+
+	// Check if the circuit files exist, else compile the circuit and write the files
+	ccs2, pk2, vk2, err := LoadCircuit(ecc.BW6_761, AggregateProofCircuitType)
+	if err != nil {
+		if errors.Is(err, ErrCircuitDoesNotExist) {
+			// Files do not exist, compile the circuit
+			fmt.Println("Compiling aggregate circuit...")
+			// Create placeholder proofs
+			placeHolderProofs := [10]BatchProofData{}
+			for i := 0; i < 10; i++ {
+				placeHolderProofs[i] = BatchProofData{
+					Proof:        stdgroth16.PlaceholderProof[sw_bls12377.G1Affine, sw_bls12377.G2Affine](ccs2),
+					PublicInputs: stdgroth16.PlaceholderWitness[sw_bls12377.ScalarField](ccs2),
+				}
+			}
+
+			placeHolderAggregateCircuit := &AggregateProofCircuit{
+				Proofs:       placeHolderProofs,
+				VerifyingKey: stdgroth16.PlaceholderVerifyingKey[sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT](ccs2),
+			}
+			// Compile the circuit
+			ccs2, pk2, vk2, err = CompileCircuit(placeHolderAggregateCircuit, ecc.BW6_761.ScalarField(), AggregateProofCircuitType)
+			if err != nil {
+				log.Fatalf("Failed to compile circuit: %v", err)
+			}
+		} else {
+			log.Fatalf("Failed to load circuit: %v", err)
+		}
+	}
+
+	fmt.Println("Creating final aggregation proof")
 	startTime = time.Now()
-	proof, err := groth16.Prove(ccs, pk, witnessFull)
+	proof2, err := groth16.Prove(ccs2, pk2, witnessFull2)
 	if err != nil {
 		fmt.Printf("Proving failed: %v\n", err)
 		return
@@ -167,127 +226,18 @@ func main() {
 	fmt.Printf("Proving Recursion time: %v\n", time.Since(startTime))
 
 	// Verify the proof
+	publicWitness2, err := witnessFull2.Public()
+	if err != nil {
+		log.Fatalf("Failed to create public witness: %v", err)
+	}
 	fmt.Println("Verifying...")
 	startTime = time.Now()
-	err = groth16.Verify(proof, vk, publicWitness)
+	err = groth16.Verify(proof2, vk2, publicWitness2)
 	if err != nil {
 		fmt.Printf("Verification failed: %v\n", err)
 		return
 	}
 	fmt.Printf("Recursive proof verification succeeded! took %s\n", time.Since(startTime))
-}
-
-// CompileCircuit compiles the circuit, generates the proving and verifying keys, and writes them to files
-func CompileCircuit(placeholderCircuit *VerifyCircomProofCircuit) (constraint.ConstraintSystem, groth16.ProvingKey, groth16.VerifyingKey, error) {
-	var err error
-	var ccs constraint.ConstraintSystem
-	var pk groth16.ProvingKey
-	var vk groth16.VerifyingKey
-
-	startTime := time.Now()
-	ccs, err = frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, placeholderCircuit)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("compile failed: %w", err)
-	}
-	fmt.Printf("Compilation time: %v\n", time.Since(startTime))
-
-	// Generate the proving and verifying keys
-	startTime = time.Now()
-	fmt.Println("Setting up proving and verifying keys...")
-	pk, vk, err = groth16.Setup(ccs)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("setup failed: %w", err)
-	}
-	fmt.Printf("Setup time: %v\n", time.Since(startTime))
-
-	// Write the proving key to a file
-	pkFile, err := os.Create("pk.bin")
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error creating pk.bin: %w", err)
-	}
-	defer pkFile.Close()
-	_, err = pk.WriteTo(pkFile)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error writing proving key to pk.bin: %w", err)
-	}
-	fmt.Println("Wrote proving key to pk.bin")
-
-	// Write verifying key to a file
-	vkFile, err := os.Create("vk.bin")
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error creating vk.bin: %w", err)
-	}
-	defer vkFile.Close()
-	_, err = vk.WriteTo(vkFile)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error writing verifying key to vk.bin: %w", err)
-	}
-	fmt.Println("Wrote verifying key to vk.bin")
-
-	// Write circuit to a file
-	circuitFile, err := os.Create("circuit.r1cs")
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error creating circuit.r1cs: %w", err)
-	}
-	defer circuitFile.Close()
-	_, err = ccs.WriteTo(circuitFile)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error writing circuit to circuit.r1cs: %w", err)
-	}
-	fmt.Println("Wrote circuit to circuit.r1cs")
-
-	return ccs, pk, vk, nil
-}
-
-// LoadCircuit loads the circuit, proving key, and verifying key from files
-func LoadCircuit() (constraint.ConstraintSystem, groth16.ProvingKey, groth16.VerifyingKey, error) {
-	var err error
-	var pk groth16.ProvingKey
-	var vk groth16.VerifyingKey
-	startTime := time.Now()
-
-	// Load circuit
-	fmt.Println("Loading circuit...")
-	circuitFile, err := os.Open("circuit.r1cs")
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error opening circuit.r1cs: %w", err)
-	}
-	defer circuitFile.Close()
-
-	ccs := groth16.NewCS(ecc.BN254)
-	_, err = ccs.ReadFrom(circuitFile)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error reading circuit from circuit.r1cs: %w", err)
-	}
-
-	// Load proving key
-	fmt.Println("Loading proving key...")
-	pkFile, err := os.Open("pk.bin")
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error opening pk.bin: %w", err)
-	}
-	defer pkFile.Close()
-	pk = groth16.NewProvingKey(ecc.BN254)
-	_, err = pk.ReadFrom(pkFile)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error reading proving key from pk.bin: %w", err)
-	}
-
-	// Load verifying key
-	fmt.Println("Loading verifying key...")
-	vkFile, err := os.Open("vk.bin")
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error opening vk.bin: %w", err)
-	}
-	defer vkFile.Close()
-	vk = groth16.NewVerifyingKey(ecc.BN254)
-	_, err = vk.ReadFrom(vkFile)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error reading verifying key from vk.bin: %w", err)
-	}
-
-	fmt.Printf("Loading artifacts total time: %v\n", time.Since(startTime))
-	return ccs, pk, vk, nil
 }
 
 // VerifyCircomProofCircuit is the circuit that verifies the Circom proof inside Gnark
@@ -303,4 +253,28 @@ func (c *VerifyCircomProofCircuit) Define(api frontend.API) error {
 		return fmt.Errorf("new verifier: %w", err)
 	}
 	return verifier.AssertProof(c.VerifyingKey, c.Proof, c.PublicInputs, stdgroth16.WithCompleteArithmetic())
+}
+
+// VerifyCircomProofCircuit is the circuit that verifies the Circom proof inside Gnark
+type AggregateProofCircuit struct {
+	Proofs       [10]BatchProofData
+	VerifyingKey stdgroth16.VerifyingKey[sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT]
+}
+
+type BatchProofData struct {
+	Proof        stdgroth16.Proof[sw_bls12377.G1Affine, sw_bls12377.G2Affine]
+	PublicInputs stdgroth16.Witness[sw_bls12377.ScalarField] `gnark:",public"`
+}
+
+func (c *AggregateProofCircuit) Define(api frontend.API) error {
+	verifier, err := stdgroth16.NewVerifier[sw_bls12377.ScalarField, sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT](api)
+	if err != nil {
+		return fmt.Errorf("new verifier: %w", err)
+	}
+	for i := 0; i < 10; i++ {
+		if err := verifier.AssertProof(c.VerifyingKey, c.Proofs[i].Proof, c.Proofs[i].PublicInputs, stdgroth16.WithCompleteArithmetic()); err != nil {
+			return fmt.Errorf("assert proof: %w", err)
+		}
+	}
+	return nil
 }
