@@ -32,21 +32,21 @@ func CompileCircuit(placeholdercircuit any, scalarField *big.Int, t circuitType)
 	var pk groth16.ProvingKey
 	var vk groth16.VerifyingKey
 	var fileSuffix string
-	var circuit frontend.Circuit
+	var circuitPlaceholder frontend.Circuit
 
 	switch t {
 	case VerifyCircomProofCircuitType:
-		circuit = placeholdercircuit.(*VerifyCircomProofCircuit)
+		circuitPlaceholder = placeholdercircuit.(*VerifyCircomProofCircuit)
 		fileSuffix = "verify"
 	case AggregateProofCircuitType:
-		circuit = placeholdercircuit.(*AggregateProofCircuit)
+		circuitPlaceholder = placeholdercircuit.(*AggregateProofCircuit)
 		fileSuffix = "aggregate"
 	default:
 		return nil, nil, nil, fmt.Errorf("unknown circuit type")
 	}
 
 	startTime := time.Now()
-	ccs, err = frontend.Compile(scalarField, r1cs.NewBuilder, circuit)
+	ccs, err = frontend.Compile(scalarField, r1cs.NewBuilder, circuitPlaceholder)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("compile failed: %w", err)
 	}
@@ -94,6 +94,9 @@ func CompileCircuit(placeholdercircuit any, scalarField *big.Int, t circuitType)
 		return nil, nil, nil, fmt.Errorf("error writing circuit to circuit.r1cs: %w", err)
 	}
 
+	// Store the loaded circuit
+	loadedCircuits[t] = circuit{ccs: ccs, pk: pk, vk: vk}
+
 	return ccs, pk, vk, nil
 }
 
@@ -113,6 +116,11 @@ func LoadCircuit(curve ecc.ID, t circuitType) (constraint.ConstraintSystem, grot
 		fileSuffix = "aggregate"
 	default:
 		return nil, nil, nil, fmt.Errorf("unknown circuit type")
+	}
+
+	// check if the circuit is already loaded and return it
+	if c, ok := loadedCircuits[t]; ok {
+		return c.ccs, c.pk, c.vk, nil
 	}
 
 	startTime := time.Now()
@@ -162,6 +170,17 @@ func LoadCircuit(curve ecc.ID, t circuitType) (constraint.ConstraintSystem, grot
 		return nil, nil, nil, fmt.Errorf("error reading verifying key from vk.bin: %w", err)
 	}
 
+	// Store the loaded circuit
+	loadedCircuits[t] = circuit{ccs: ccs, pk: pk, vk: vk}
+
 	fmt.Printf("Loading artifacts total time: %v\n", time.Since(startTime))
 	return ccs, pk, vk, nil
+}
+
+var loadedCircuits = make(map[circuitType]circuit)
+
+type circuit struct {
+	vk  groth16.VerifyingKey
+	pk  groth16.ProvingKey
+	ccs constraint.ConstraintSystem
 }
