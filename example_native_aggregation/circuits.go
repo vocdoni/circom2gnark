@@ -46,7 +46,7 @@ func (c *AggregateProofCircuit) Define(api frontend.API) error {
 	}
 	for i := 0; i < numProofs; i++ {
 		fmt.Printf("Verifying proof %d\n", i)
-		if err := verifier.AssertProof(c.VerifyingKey, c.Proofs[i].Proof, c.Proofs[i].PublicInputs, stdgroth16.WithCompleteArithmetic()); err != nil {
+		if err := verifier.AssertProof(c.VerifyingKey, c.Proofs[i].Proof, c.Proofs[i].PublicInputs); err != nil {
 			return fmt.Errorf("assert proof: %w", err)
 		}
 		fmt.Printf("Proof %d verified\n", i)

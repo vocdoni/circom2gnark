@@ -11,6 +11,7 @@ import (
 	"github.com/consensys/gnark/backend/witness"
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
+	stdgroth16 "github.com/consensys/gnark/std/recursion/groth16"
 	"github.com/consensys/gnark/test"
 	"github.com/vocdoni/circom2gnark/parser"
 )
@@ -122,7 +123,7 @@ func circom2gnarkRecursiveBls12377(proofData, vkData, publicSignalsData []byte, 
 	// Create the proof
 	fmt.Println("Generating a recursive proof BLS12-377 of an independent Circom proof...")
 	startTime := time.Now()
-	proof, err := groth16.Prove(ccs, pk, witnessFull)
+	proof, err := groth16.Prove(ccs, pk, witnessFull, stdgroth16.GetNativeProverOptions(ecc.BW6_761.ScalarField(), ecc.BLS12_377.ScalarField()))
 	if err != nil {
 		log.Fatalf("Failed to create proof: %v", err)
 	}
@@ -131,7 +132,7 @@ func circom2gnarkRecursiveBls12377(proofData, vkData, publicSignalsData []byte, 
 	// Verify the proof
 	fmt.Println("Verifying...")
 	startTime = time.Now()
-	err = groth16.Verify(proof, vk, publicWitness)
+	err = groth16.Verify(proof, vk, publicWitness, stdgroth16.GetNativeVerifierOptions(ecc.BW6_761.ScalarField(), ecc.BLS12_377.ScalarField()))
 	if err != nil {
 		log.Fatalf("Failed to verify proof: %v", err)
 	}

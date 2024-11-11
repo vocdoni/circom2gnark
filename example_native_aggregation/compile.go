@@ -78,7 +78,7 @@ func CompileCircuit(placeholdercircuit any, scalarField *big.Int, t circuitType)
 		return nil, nil, nil, fmt.Errorf("error creating vk.bin: %w", err)
 	}
 	defer vkFile.Close()
-	_, err = vk.WriteTo(vkFile)
+	_, err = vk.WriteRawTo(vkFile)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("error writing verifying key to vk.bin: %w", err)
 	}
@@ -143,7 +143,8 @@ func LoadCircuit(curve ecc.ID, t circuitType) (constraint.ConstraintSystem, grot
 	}
 	defer pkFile.Close()
 	pk = groth16.NewProvingKey(curve)
-	_, err = pk.ReadFrom(pkFile)
+
+	_, err = pk.UnsafeReadFrom(pkFile)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("error reading proving key from pk.bin: %w", err)
 	}
