@@ -42,7 +42,7 @@ func main() {
 	var ccs constraint.ConstraintSystem
 
 	for i := 0; i < numProofs; i++ {
-		fmt.Printf("Generating proof %d\n", i)
+		fmt.Printf("Generating recursive emulated proof from Circom/bn254 to Gnark/bls12377: %d\n", i)
 		startTime := time.Now()
 		// Generate the first proof, from bn254/Circom to bls12377/Gnark using emulated arithmetic
 		proof, vki, wit, ccsi := circom2gnarkRecursiveBls12377(proofData, vkData, publicSignalsData, runtest)
@@ -55,8 +55,15 @@ func main() {
 	}
 
 	// Generate the second proof, from bls12377/Gnark (multiple) to bw6_761/Gnark using native arithmetic
-	log.Println("Aggregating proofs...")
-	if err := AggregateProofs(proofs, vk, ccs); err != nil {
+	log.Println("Aggregating proofs using native recursion bls12377 -> bw6-761")
+	p_a, vk_a, ccs_a, err := AggregateProofs(proofs, vk, ccs)
+	if err != nil {
 		log.Fatalf("failed to aggregate proofs: %v", err)
+	}
+
+	// Transform the proof to BN254 using emulated arithmetic
+	log.Println("Transform bw6-761 aggregation proof to bn254 using emulated recursion")
+	if err := aggregateProofToBn254(p_a, vk_a, ccs_a); err != nil {
+		log.Fatalf("failed to transform proof to BN254: %v", err)
 	}
 }

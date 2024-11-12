@@ -63,7 +63,6 @@ type innerProof struct {
 */
 
 func createAggregationPlaceholderData(ccs constraint.ConstraintSystem) (*AggregateProofCircuit, error) {
-
 	placeHolderProofs := [numProofs]BatchProofData{}
 	for i := 0; i < numProofs; i++ {
 		// Create placeholder proof
@@ -104,24 +103,26 @@ func createAggregationCircuitData(proofs []*innerProof, vk groth16.VerifyingKey)
 	return aggregateCircuitData, nil
 }
 
-func AggregateProofs(proofs []*innerProof, vkProofs groth16.VerifyingKey, ccsInner constraint.ConstraintSystem) error {
+func AggregateProofs(proofs []*innerProof, vkProofs groth16.VerifyingKey, ccsInner constraint.ConstraintSystem) (
+	*innerProof, groth16.VerifyingKey,
+	constraint.ConstraintSystem, error) {
 	if len(proofs) != numProofs {
 		log.Fatalf("Number of proofs should be %d", numProofs)
 	}
 
 	placeHolderCircuit, err := createAggregationPlaceholderData(ccsInner)
 	if err != nil {
-		return fmt.Errorf("failed to create placeholder data: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create placeholder data: %w", err)
 	}
 
 	circuitAssignments, err := createAggregationCircuitData(proofs, vkProofs)
 	if err != nil {
-		return fmt.Errorf("failed to create circuit data: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create circuit data: %w", err)
 	}
 
 	// Test the solve circuit
 	if err = test.IsSolved(placeHolderCircuit, circuitAssignments, ecc.BW6_761.ScalarField()); err != nil {
-		log.Fatalf("Failed to test solve circuit: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to solve circuit: %w", err)
 	}
 
 	// Check if the circuit files exist, else compile the circuit and write the files
@@ -134,39 +135,39 @@ func AggregateProofs(proofs []*innerProof, vkProofs groth16.VerifyingKey, ccsInn
 			// Compile the circuit
 			ccs, pk, vk, err = CompileCircuit(placeHolderCircuit, ecc.BW6_761.ScalarField(), AggregateProofCircuitType)
 			if err != nil {
-				log.Fatalf("Failed to compile circuit: %v", err)
+				return nil, nil, nil, fmt.Errorf("failed to compile circuit: %w", err)
 			}
 		} else {
-			log.Fatalf("Failed to load circuit: %v", err)
+			return nil, nil, nil, fmt.Errorf("failed to load circuit: %w", err)
 		}
 	}
 
 	fmt.Println("Creating witness for final aggregation proof...")
 	witnessFull, err := frontend.NewWitness(circuitAssignments, ecc.BW6_761.ScalarField())
 	if err != nil {
-		log.Fatalf("Failed to create witness: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to create witness: %w", err)
 	}
 
 	fmt.Println("Creating final aggregation proof")
 	startTime := time.Now()
 	proof2, err := groth16.Prove(ccs, pk, witnessFull)
 	if err != nil {
-		return fmt.Errorf("failed to create proof: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create proof: %w", err)
 	}
 	fmt.Printf("Proving Recursion time: %v\n", time.Since(startTime))
 
 	// Verify the proof
 	publicWitness, err := witnessFull.Public()
 	if err != nil {
-		log.Fatalf("Failed to create public witness: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to create public witness: %w", err)
 	}
 	fmt.Println("Verifying...")
 	startTime = time.Now()
 	err = groth16.Verify(proof2, vk, publicWitness)
 	if err != nil {
-		return fmt.Errorf("failed to verify proof: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to verify proof: %w", err)
 	}
 	fmt.Printf("Recursive proof verification succeeded! took %s\n", time.Since(startTime))
 
-	return nil
+	return &innerProof{p: proof2, w: publicWitness}, vk, ccs, nil
 }

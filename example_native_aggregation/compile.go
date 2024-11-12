@@ -21,6 +21,8 @@ const (
 	VerifyCircomProofCircuitType circuitType = iota
 	// AggregateProofCircuitType is the circuit that verifies the Circom proof inside Gnark
 	AggregateProofCircuitType
+	// AggregateProofCircuitBN254Type is the circuit that verifies the proof aggregation using BN254 curve
+	AggregateProofCircuitBN254Type
 )
 
 var ErrCircuitDoesNotExist = fmt.Errorf("circuit does not exist")
@@ -41,6 +43,9 @@ func CompileCircuit(placeholdercircuit any, scalarField *big.Int, t circuitType)
 	case AggregateProofCircuitType:
 		circuitPlaceholder = placeholdercircuit.(*AggregateProofCircuit)
 		fileSuffix = "aggregate"
+	case AggregateProofCircuitBN254Type:
+		circuitPlaceholder = placeholdercircuit.(*AggregateProofCircuitBN254)
+		fileSuffix = "aggregate_bn254"
 	default:
 		return nil, nil, nil, fmt.Errorf("unknown circuit type")
 	}
@@ -114,6 +119,8 @@ func LoadCircuit(curve ecc.ID, t circuitType) (constraint.ConstraintSystem, grot
 		fileSuffix = "verify"
 	case AggregateProofCircuitType:
 		fileSuffix = "aggregate"
+	case AggregateProofCircuitBN254Type:
+		fileSuffix = "aggregate_bn254"
 	default:
 		return nil, nil, nil, fmt.Errorf("unknown circuit type")
 	}
