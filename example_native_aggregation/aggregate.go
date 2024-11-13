@@ -150,7 +150,7 @@ func AggregateProofs(proofs []*innerProof, vkProofs groth16.VerifyingKey, ccsInn
 
 	fmt.Println("Creating final aggregation proof")
 	startTime := time.Now()
-	proof2, err := groth16.Prove(ccs, pk, witnessFull)
+	proof2, err := groth16.Prove(ccs, pk, witnessFull, stdgroth16.GetNativeProverOptions(ecc.BN254.ScalarField(), ecc.BW6_761.ScalarField()))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create proof: %w", err)
 	}
@@ -163,7 +163,7 @@ func AggregateProofs(proofs []*innerProof, vkProofs groth16.VerifyingKey, ccsInn
 	}
 	fmt.Println("Verifying...")
 	startTime = time.Now()
-	err = groth16.Verify(proof2, vk, publicWitness)
+	err = groth16.Verify(proof2, vk, publicWitness, stdgroth16.GetNativeVerifierOptions(ecc.BN254.ScalarField(), ecc.BW6_761.ScalarField()))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to verify proof: %w", err)
 	}
