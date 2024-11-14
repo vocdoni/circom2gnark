@@ -8,6 +8,7 @@ import (
 
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
+	"github.com/consensys/gnark/std/math/emulated"
 	stdgroth16 "github.com/consensys/gnark/std/recursion/groth16"
 	"github.com/consensys/gnark/test"
 
@@ -100,6 +101,18 @@ func createAggregationCircuitData(proofs []*innerProof, vk groth16.VerifyingKey)
 		}
 		aggregateCircuitData.Proofs[i] = proofData
 	}
+
+	// Compute PublicHash
+	ep := [][]emulated.Element[sw_bls12377.ScalarField]{}
+	for _, proof := range aggregateCircuitData.Proofs {
+		ep = append(ep, proof.PublicInputs.Public)
+	}
+	publicHashValue, err := ComputePublicInputsHashFromBLS12377ToBW6761(ep)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute public inputs hash: %w", err)
+	}
+	aggregateCircuitData.PublicHash = publicHashValue
+
 	return aggregateCircuitData, nil
 }
 
