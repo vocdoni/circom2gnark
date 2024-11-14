@@ -62,7 +62,7 @@ type innerProof struct {
 }
 */
 
-func createAggregationPlaceholderData(ccs constraint.ConstraintSystem) (*AggregateProofCircuit, error) {
+func createAggregationPlaceholderData(ccs constraint.ConstraintSystem, vk groth16.VerifyingKey) (*AggregateProofCircuit, error) {
 	placeHolderProofs := [numProofs]BatchProofData{}
 	for i := 0; i < numProofs; i++ {
 		// Create placeholder proof
@@ -71,24 +71,20 @@ func createAggregationPlaceholderData(ccs constraint.ConstraintSystem) (*Aggrega
 			Proof:        stdgroth16.PlaceholderProof[sw_bls12377.G1Affine, sw_bls12377.G2Affine](ccs),
 		}
 	}
-
-	return &AggregateProofCircuit{
-		Proofs:       placeHolderProofs,
-		VerifyingKey: stdgroth16.PlaceholderVerifyingKey[sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT](ccs),
-	}, nil
-}
-
-func createAggregationCircuitData(proofs []*innerProof, vk groth16.VerifyingKey) (*AggregateProofCircuit, error) {
-	// Create the proofs for the aggregate recursion circuit
-	aggregateProofCircuitVk, err := stdgroth16.ValueOfVerifyingKey[sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT](vk)
+	vvk, err := stdgroth16.ValueOfVerifyingKeyFixed[sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT](vk)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert verification key to recursion verification key: %w", err)
 	}
+	return &AggregateProofCircuit{
+		Proofs:       placeHolderProofs,
+		VerifyingKey: vvk,
+	}, nil
+}
 
-	aggregateCircuitData := &AggregateProofCircuit{
-		VerifyingKey: aggregateProofCircuitVk,
-	}
-
+func createAggregationCircuitData(proofs []*innerProof) (*AggregateProofCircuit, error) {
+	// Create the proofs for the aggregate recursion circuit
+	aggregateCircuitData := &AggregateProofCircuit{}
+	var err error
 	for i := 0; i < numProofs; i++ {
 		proofData := BatchProofData{}
 		if proofData.PublicInputs, err = stdgroth16.ValueOfWitness[sw_bls12377.ScalarField](proofs[i].w); err != nil {
@@ -110,12 +106,12 @@ func AggregateProofs(proofs []*innerProof, vkProofs groth16.VerifyingKey, ccsInn
 		log.Fatalf("Number of proofs should be %d", numProofs)
 	}
 
-	placeHolderCircuit, err := createAggregationPlaceholderData(ccsInner)
+	placeHolderCircuit, err := createAggregationPlaceholderData(ccsInner, vkProofs)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create placeholder data: %w", err)
 	}
 
-	circuitAssignments, err := createAggregationCircuitData(proofs, vkProofs)
+	circuitAssignments, err := createAggregationCircuitData(proofs)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create circuit data: %w", err)
 	}

@@ -32,7 +32,7 @@ func (c *VerifyCircomProofCircuit) Define(api frontend.API) error {
 // AggregateProofCircuit is the circuit that verifies multiple proofs inside Gnark
 type AggregateProofCircuit struct {
 	Proofs       [numProofs]BatchProofData
-	VerifyingKey stdgroth16.VerifyingKey[sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT]
+	VerifyingKey stdgroth16.VerifyingKey[sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT] `gnark:"-"`
 }
 
 // BatchProofData is the data structure that holds the proof and public inputs for each proof
