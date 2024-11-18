@@ -77,7 +77,7 @@ func createAggregationPlaceholderData(ccs constraint.ConstraintSystem, vk groth1
 	}
 	return &AggregateProofCircuit{
 		Proofs:       placeHolderProofs,
-		VerifyingKey: vvk,
+		verifyingKey: vvk,
 	}, nil
 }
 

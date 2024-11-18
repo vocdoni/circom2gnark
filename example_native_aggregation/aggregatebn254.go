@@ -17,12 +17,12 @@ import (
 
 // aggregateProofToBn254 transforms the aggregate proof to a recursion proof using BN254 curve
 func aggregateProofToBn254(proof *innerProof, vkInner groth16.VerifyingKey, ccsInner constraint.ConstraintSystem) error {
-	placeHolderCircuit, err := createAggregationBn254PlaceholderData(ccsInner)
+	placeHolderCircuit, err := createAggregationBn254PlaceholderData(ccsInner, vkInner)
 	if err != nil {
 		return fmt.Errorf("failed to create placeholder data: %w", err)
 	}
 
-	circuitAssignments, err := createAggregationBn254CircuitData(proof, vkInner)
+	circuitAssignments, err := createAggregationBn254CircuitData(proof)
 	if err != nil {
 		return fmt.Errorf("failed to create circuit data: %w", err)
 	}
@@ -79,20 +79,20 @@ func aggregateProofToBn254(proof *innerProof, vkInner groth16.VerifyingKey, ccsI
 	return nil
 }
 
-func createAggregationBn254PlaceholderData(ccs constraint.ConstraintSystem) (*AggregateProofCircuitBN254, error) {
+func createAggregationBn254PlaceholderData(ccs constraint.ConstraintSystem, vk groth16.VerifyingKey) (*AggregateProofCircuitBN254, error) {
+	aggregateProofCircuitVk, err := stdgroth16.ValueOfVerifyingKeyFixed[sw_bw6761.G1Affine, sw_bw6761.G2Affine, sw_bw6761.GTEl](vk)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert verification key to recursion verification key: %w", err)
+	}
 	return &AggregateProofCircuitBN254{
 		Proof:        stdgroth16.PlaceholderProof[sw_bw6761.G1Affine, sw_bw6761.G2Affine](ccs),
-		VerifyingKey: stdgroth16.PlaceholderVerifyingKey[sw_bw6761.G1Affine, sw_bw6761.G2Affine, sw_bw6761.GTEl](ccs),
+		verifyingKey: aggregateProofCircuitVk,
 		PublicInputs: stdgroth16.PlaceholderWitness[sw_bw6761.ScalarField](ccs),
 	}, nil
 }
 
-func createAggregationBn254CircuitData(proof *innerProof, vk groth16.VerifyingKey) (*AggregateProofCircuitBN254, error) {
+func createAggregationBn254CircuitData(proof *innerProof) (*AggregateProofCircuitBN254, error) {
 	// Create the proofs for the aggregate recursion circuit
-	aggregateProofCircuitVk, err := stdgroth16.ValueOfVerifyingKey[sw_bw6761.G1Affine, sw_bw6761.G2Affine, sw_bw6761.GTEl](vk)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert verification key to recursion verification key: %w", err)
-	}
 	p, err := stdgroth16.ValueOfProof[sw_bw6761.G1Affine, sw_bw6761.G2Affine](proof.p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert proof to recursion proof: %w", err)
@@ -103,7 +103,6 @@ func createAggregationBn254CircuitData(proof *innerProof, vk groth16.VerifyingKe
 	}
 
 	return &AggregateProofCircuitBN254{
-		VerifyingKey: aggregateProofCircuitVk,
 		Proof:        p,
 		PublicInputs: w,
 	}, nil

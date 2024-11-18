@@ -32,7 +32,7 @@ func (c *VerifyCircomProofCircuit) Define(api frontend.API) error {
 // AggregateProofCircuit is the circuit that verifies multiple proofs inside Gnark
 type AggregateProofCircuit struct {
 	Proofs       [numProofs]BatchProofData
-	VerifyingKey stdgroth16.VerifyingKey[sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT] `gnark:"-"`
+	verifyingKey stdgroth16.VerifyingKey[sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT] `gnark:"-"`
 }
 
 // BatchProofData is the data structure that holds the proof and public inputs for each proof
@@ -48,7 +48,7 @@ func (c *AggregateProofCircuit) Define(api frontend.API) error {
 	}
 	for i := 0; i < numProofs; i++ {
 		fmt.Printf("Verifying proof %d\n", i)
-		if err := verifier.AssertProof(c.VerifyingKey, c.Proofs[i].Proof, c.Proofs[i].PublicInputs); err != nil {
+		if err := verifier.AssertProof(c.verifyingKey, c.Proofs[i].Proof, c.Proofs[i].PublicInputs); err != nil {
 			return fmt.Errorf("assert proof: %w", err)
 		}
 		fmt.Printf("Proof %d verified\n", i)
@@ -59,8 +59,8 @@ func (c *AggregateProofCircuit) Define(api frontend.API) error {
 // AggregateProofCircuitBN254 is the circuit that verifies the proof aggregation using BN254 curve
 type AggregateProofCircuitBN254 struct {
 	Proof        stdgroth16.Proof[sw_bw6761.G1Affine, sw_bw6761.G2Affine]
-	VerifyingKey stdgroth16.VerifyingKey[sw_bw6761.G1Affine, sw_bw6761.G2Affine, sw_bw6761.GTEl]
-	PublicInputs stdgroth16.Witness[sw_bw6761.ScalarField] `gnark:",public"`
+	verifyingKey stdgroth16.VerifyingKey[sw_bw6761.G1Affine, sw_bw6761.G2Affine, sw_bw6761.GTEl] `gnark:"-"`
+	PublicInputs stdgroth16.Witness[sw_bw6761.ScalarField]                                       `gnark:",public"`
 }
 
 func (c *AggregateProofCircuitBN254) Define(api frontend.API) error {
@@ -68,5 +68,5 @@ func (c *AggregateProofCircuitBN254) Define(api frontend.API) error {
 	if err != nil {
 		return fmt.Errorf("new verifier: %w", err)
 	}
-	return verifier.AssertProof(c.VerifyingKey, c.Proof, c.PublicInputs, stdgroth16.WithCompleteArithmetic())
+	return verifier.AssertProof(c.verifyingKey, c.Proof, c.PublicInputs, stdgroth16.WithCompleteArithmetic())
 }
