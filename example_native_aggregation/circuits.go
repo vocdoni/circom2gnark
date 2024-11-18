@@ -7,11 +7,12 @@ import (
 	"github.com/consensys/gnark/std/algebra/emulated/sw_bn254"
 	"github.com/consensys/gnark/std/algebra/emulated/sw_bw6761"
 	"github.com/consensys/gnark/std/algebra/native/sw_bls12377"
+	"github.com/consensys/gnark/std/hash/mimc"
 	stdgroth16 "github.com/consensys/gnark/std/recursion/groth16"
 )
 
 const (
-	numProofs = 1
+	numProofs = 10
 )
 
 // VerifyCircomProofCircuit is the circuit that verifies the Circom proof inside Gnark
@@ -33,25 +34,43 @@ func (c *VerifyCircomProofCircuit) Define(api frontend.API) error {
 type AggregateProofCircuit struct {
 	Proofs       [numProofs]BatchProofData
 	verifyingKey stdgroth16.VerifyingKey[sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT] `gnark:"-"`
+	PublicHash   frontend.Variable                                                                   `gnark:",public"`
 }
 
-// BatchProofData is the data structure that holds the proof and public inputs for each proof
 type BatchProofData struct {
 	Proof        stdgroth16.Proof[sw_bls12377.G1Affine, sw_bls12377.G2Affine]
-	PublicInputs stdgroth16.Witness[sw_bls12377.ScalarField] `gnark:",public"`
+	PublicInputs stdgroth16.Witness[sw_bls12377.ScalarField]
 }
 
 func (c *AggregateProofCircuit) Define(api frontend.API) error {
+	// Initialize MiMC hash function
+	hFunc, err := mimc.NewMiMC(api)
+	if err != nil {
+		return err
+	}
+
+	// Compute the hash of all public inputs
+	for i := 0; i < numProofs; i++ {
+		for _, input := range c.Proofs[i].PublicInputs.Public {
+			// Write the limbs of each public input to the hash function
+			hFunc.Write(input.Limbs...)
+		}
+	}
+	computedHash := hFunc.Sum()
+	// Assert that the computed hash matches the provided PublicHash
+	api.AssertIsEqual(computedHash, c.PublicHash)
+	api.Println("=> Computed inputs hash: ", computedHash)
+
+	// Proceed with proof verification
 	verifier, err := stdgroth16.NewVerifier[sw_bls12377.ScalarField, sw_bls12377.G1Affine, sw_bls12377.G2Affine, sw_bls12377.GT](api)
 	if err != nil {
 		return fmt.Errorf("new verifier: %w", err)
 	}
 	for i := 0; i < numProofs; i++ {
-		fmt.Printf("Verifying proof %d\n", i)
+		api.Println("=> Verifying in-circuit proof: ", i)
 		if err := verifier.AssertProof(c.verifyingKey, c.Proofs[i].Proof, c.Proofs[i].PublicInputs); err != nil {
 			return fmt.Errorf("assert proof: %w", err)
 		}
-		fmt.Printf("Proof %d verified\n", i)
 	}
 	return nil
 }
