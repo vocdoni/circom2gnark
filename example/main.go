@@ -80,7 +80,7 @@ func main() {
 	fmt.Println("Now let's build a new circuit to verify the Circom proof recursively")
 
 	// Get the recursion proof and placeholders
-	recursionData, recursionPlaceholders, err := parser.ConvertCircomToGnarkRecursion(snarkProof, snarkVk, publicSignals)
+	recursionData, recursionPlaceholders, err := parser.ConvertCircomToGnarkRecursion(snarkProof, snarkVk, publicSignals, true)
 	if err != nil {
 		log.Fatalf("failed to convert Circom proof to Gnark recursion proof: %v", err)
 	}
@@ -102,7 +102,6 @@ func main() {
 		// Create the circuit assignment with actual values
 		circuitAssignment := &VerifyCircomProofCircuit{
 			Proof:        recursionData.Proof,
-			VerifyingKey: recursionData.Vk,
 			PublicInputs: recursionData.PublicInputs,
 		}
 
@@ -135,7 +134,6 @@ func main() {
 	// Create the circuit assignment with actual values
 	circuitAssignment := &VerifyCircomProofCircuit{
 		Proof:        recursionData.Proof,
-		VerifyingKey: recursionData.Vk,
 		PublicInputs: recursionData.PublicInputs,
 	}
 
@@ -293,8 +291,8 @@ func LoadCircuit() (constraint.ConstraintSystem, groth16.ProvingKey, groth16.Ver
 // VerifyCircomProofCircuit is the circuit that verifies the Circom proof inside Gnark
 type VerifyCircomProofCircuit struct {
 	Proof        stdgroth16.Proof[sw_bn254.G1Affine, sw_bn254.G2Affine]
-	VerifyingKey stdgroth16.VerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl]
-	PublicInputs stdgroth16.Witness[sw_bn254.ScalarField] `gnark:",public"`
+	verifyingKey stdgroth16.VerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl] `gnark:"-"`
+	PublicInputs stdgroth16.Witness[sw_bn254.ScalarField]                                     `gnark:",public"`
 }
 
 func (c *VerifyCircomProofCircuit) Define(api frontend.API) error {
@@ -302,5 +300,5 @@ func (c *VerifyCircomProofCircuit) Define(api frontend.API) error {
 	if err != nil {
 		return fmt.Errorf("new verifier: %w", err)
 	}
-	return verifier.AssertProof(c.VerifyingKey, c.Proof, c.PublicInputs, stdgroth16.WithCompleteArithmetic())
+	return verifier.AssertProof(c.verifyingKey, c.Proof, c.PublicInputs, stdgroth16.WithCompleteArithmetic())
 }

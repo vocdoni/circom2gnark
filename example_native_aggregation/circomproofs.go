@@ -47,7 +47,7 @@ func parseCircomProof(proofData, vkData, publicSignalsData []byte) (*parser.Gnar
 		log.Fatalf("proof verification failed")
 	}
 
-	recursionData, recursionPlaceholders, err := parser.ConvertCircomToGnarkRecursion(snarkProof, snarkVk, publicSignals)
+	recursionData, recursionPlaceholders, err := parser.ConvertCircomToGnarkRecursion(snarkProof, snarkVk, publicSignals, true)
 	if err != nil {
 		log.Fatalf("failed to convert Circom proof to Gnark recursion proof: %v", err)
 	}
@@ -76,7 +76,6 @@ func circom2gnarkRecursiveBls12377(proofData, vkData, publicSignalsData []byte, 
 		// Create the circuit assignment with actual values
 		circuitAssignment := &VerifyCircomProofCircuit{
 			Proof:        recursionData.Proof,
-			VerifyingKey: recursionData.Vk,
 			PublicInputs: recursionData.PublicInputs,
 		}
 
@@ -104,7 +103,6 @@ func circom2gnarkRecursiveBls12377(proofData, vkData, publicSignalsData []byte, 
 	// Create the circuit assignment with actual values
 	circuitAssignment := &VerifyCircomProofCircuit{
 		Proof:        recursionData.Proof,
-		VerifyingKey: recursionData.Vk,
 		PublicInputs: recursionData.PublicInputs,
 	}
 

@@ -18,8 +18,8 @@ const (
 // VerifyCircomProofCircuit is the circuit that verifies the Circom proof inside Gnark
 type VerifyCircomProofCircuit struct {
 	Proof        stdgroth16.Proof[sw_bn254.G1Affine, sw_bn254.G2Affine]
-	VerifyingKey stdgroth16.VerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl]
-	PublicInputs stdgroth16.Witness[sw_bn254.ScalarField] `gnark:",public"`
+	verifyingKey stdgroth16.VerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl] `gnark:"-"`
+	PublicInputs stdgroth16.Witness[sw_bn254.ScalarField]                                     `gnark:",public"`
 }
 
 func (c *VerifyCircomProofCircuit) Define(api frontend.API) error {
@@ -27,7 +27,7 @@ func (c *VerifyCircomProofCircuit) Define(api frontend.API) error {
 	if err != nil {
 		return fmt.Errorf("new verifier: %w", err)
 	}
-	return verifier.AssertProof(c.VerifyingKey, c.Proof, c.PublicInputs, stdgroth16.WithCompleteArithmetic())
+	return verifier.AssertProof(c.verifyingKey, c.Proof, c.PublicInputs, stdgroth16.WithCompleteArithmetic())
 }
 
 // AggregateProofCircuit is the circuit that verifies multiple proofs inside Gnark
