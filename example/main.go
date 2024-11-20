@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark/backend"
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
@@ -157,7 +158,7 @@ func main() {
 	// Create the proof
 	fmt.Println("Proving...")
 	startTime = time.Now()
-	proof, err := groth16.Prove(ccs, pk, witnessFull)
+	proof, err := groth16.Prove(ccs, pk, witnessFull, backend.WithIcicleAcceleration())
 	if err != nil {
 		fmt.Printf("Proving failed: %v\n", err)
 		return
