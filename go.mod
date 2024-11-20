@@ -2,7 +2,7 @@ module github.com/vocdoni/circom2gnark
 
 go 1.23.2
 
-replace github.com/consensys/gnark => github.com/consensys/gnark v0.11.1-0.20241116155937-7512178ac1fc
+replace github.com/consensys/gnark => github.com/ingonyama-zk/gnark v0.0.0-20241119113116-1abf497859d6
 
 require (
 	github.com/consensys/gnark v0.11.1-0.20241116155937-7512178ac1fc
@@ -16,8 +16,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/google/pprof v0.0.0-20240727154555-813a5fbdbec8 // indirect
-	github.com/ingonyama-zk/icicle v1.1.0 // indirect
-	github.com/ingonyama-zk/iciclegnark v0.1.0 // indirect
+	github.com/ingonyama-zk/icicle/v3 v3.1.1-0.20241118092657-fccdb2f0921b // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
