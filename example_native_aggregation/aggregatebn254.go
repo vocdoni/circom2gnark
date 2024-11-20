@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark/backend"
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
@@ -57,7 +58,7 @@ func aggregateProofToBn254(proof *innerProof, vkInner groth16.VerifyingKey, ccsI
 
 	fmt.Println("Creating final bn254 aggregation proof")
 	startTime := time.Now()
-	proof2, err := groth16.Prove(ccs, pk, witnessFull)
+	proof2, err := groth16.Prove(ccs, pk, witnessFull, backend.WithIcicleAcceleration())
 	if err != nil {
 		return fmt.Errorf("failed to create proof: %w", err)
 	}

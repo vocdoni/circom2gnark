@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	numProofs = 10
+	numProofs = 100
 )
 
 // VerifyCircomProofCircuit is the circuit that verifies the Circom proof inside Gnark

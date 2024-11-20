@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/consensys/gnark/backend"
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/std/math/emulated"
@@ -159,7 +160,7 @@ func AggregateProofs(proofs []*innerProof, vkProofs groth16.VerifyingKey, ccsInn
 
 	fmt.Println("Creating final aggregation proof")
 	startTime := time.Now()
-	proof2, err := groth16.Prove(ccs, pk, witnessFull, stdgroth16.GetNativeProverOptions(ecc.BN254.ScalarField(), ecc.BW6_761.ScalarField()))
+	proof2, err := groth16.Prove(ccs, pk, witnessFull, stdgroth16.GetNativeProverOptions(ecc.BN254.ScalarField(), ecc.BW6_761.ScalarField()), backend.WithIcicleAcceleration())
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create proof: %w", err)
 	}

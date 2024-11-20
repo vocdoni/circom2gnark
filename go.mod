@@ -2,6 +2,8 @@ module github.com/vocdoni/circom2gnark
 
 go 1.23.2
 
+replace github.com/consensys/gnark => github.com/consensys/gnark v0.11.1-0.20241116155937-7512178ac1fc
+
 require (
 	github.com/consensys/gnark v0.11.1-0.20241116155937-7512178ac1fc
 	github.com/consensys/gnark-crypto v0.14.1-0.20241010154951-6638408a49f3

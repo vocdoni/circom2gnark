@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark/backend"
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/backend/witness"
 	"github.com/consensys/gnark/constraint"
@@ -121,7 +122,7 @@ func circom2gnarkRecursiveBls12377(proofData, vkData, publicSignalsData []byte, 
 	// Create the proof
 	fmt.Println("Generating a recursive proof BLS12-377 of an independent Circom proof...")
 	startTime := time.Now()
-	proof, err := groth16.Prove(ccs, pk, witnessFull, stdgroth16.GetNativeProverOptions(ecc.BW6_761.ScalarField(), ecc.BLS12_377.ScalarField()))
+	proof, err := groth16.Prove(ccs, pk, witnessFull, stdgroth16.GetNativeProverOptions(ecc.BW6_761.ScalarField(), ecc.BLS12_377.ScalarField()), backend.WithIcicleAcceleration())
 	if err != nil {
 		log.Fatalf("Failed to create proof: %v", err)
 	}
