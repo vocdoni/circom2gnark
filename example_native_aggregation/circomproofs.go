@@ -34,7 +34,7 @@ func parseCircomProof(proofData, vkData, publicSignalsData []byte) (*parser.Gnar
 	}
 
 	// Verify the proof outside a recursive circuit
-	gnarkProof, err := parser.ConvertCircomToGnark(snarkProof, snarkVk, publicSignals)
+	gnarkProof, err := parser.ConvertCircomToGnark(snarkVk, snarkProof, publicSignals)
 	if err != nil {
 		log.Fatalf("failed to convert Circom proof to Gnark proof: %v", err)
 	}
@@ -47,7 +47,12 @@ func parseCircomProof(proofData, vkData, publicSignalsData []byte) (*parser.Gnar
 		log.Fatalf("proof verification failed")
 	}
 
-	recursionData, recursionPlaceholders, err := parser.ConvertCircomToGnarkRecursion(snarkProof, snarkVk, publicSignals, true)
+	recursionPlaceholders, err := parser.PlaceholdersForRecursion(snarkVk, len(publicSignals), true)
+	if err != nil {
+		log.Fatalf("failed to create placeholders for recursion: %v", err)
+	}
+
+	recursionData, err := parser.ConvertCircomToGnarkRecursion(snarkVk, snarkProof, publicSignals, true)
 	if err != nil {
 		log.Fatalf("failed to convert Circom proof to Gnark recursion proof: %v", err)
 	}

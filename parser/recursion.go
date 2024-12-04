@@ -11,34 +11,32 @@ import (
 	"github.com/consensys/gnark/std/algebra/emulated/sw_bn254"
 )
 
-// ConvertCircomToGnarkRecursion converts a Circom proof, verification key, and public signals to the Gnark recursion proof format.
-// It returns in addition a set of placeholders needed to define the recursive circuit.
-// If fixedVk is true, the verification key is fixed and must be defined as 'gnark:"-"' in the Circuit.
-func ConvertCircomToGnarkRecursion(circomProof *CircomProof, circomVk *CircomVerificationKey, circomPublicSignals []string, fixedVk bool) (*GnarkRecursionProof, *GnarkRecursionPlaceholders, error) {
+// ConvertCircomToGnarkRecursion converts a Circom proof, verification key, and
+// public signals to the Gnark recursion proof format. If fixedVk is true, the
+// verification key is fixed and must be defined as 'gnark:"-"' in the Circuit.
+func ConvertCircomToGnarkRecursion(circomVk *CircomVerificationKey,
+	circomProof *CircomProof, circomPublicSignals []string, fixedVk bool,
+) (*GnarkRecursionProof, error) {
 	// Convert public signals to field elements
 	publicInputs, err := ConvertPublicInputs(circomPublicSignals)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-
 	// Convert the proof and verification key to gnark types
 	gnarkProof, err := ConvertProof(circomProof)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-
 	// Convert the proof and verification key to recursion types
 	recursionProof, err := recursion.ValueOfProof[sw_bn254.G1Affine, sw_bn254.G2Affine](gnarkProof)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to convert proof to recursion proof: %w", err)
+		return nil, fmt.Errorf("failed to convert proof to recursion proof: %w", err)
 	}
-
 	// Convert the verification key to recursion verification key
 	gnarkVk, err := ConvertVerificationKey(circomVk)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-
 	// Transform the public inputs to emulated elements for the recursion circuit
 	publicInputElementsEmulated := make([]emulated.Element[sw_bn254.ScalarField], len(publicInputs))
 	for i, input := range publicInputs {
@@ -46,46 +44,50 @@ func ConvertCircomToGnarkRecursion(circomProof *CircomProof, circomVk *CircomVer
 		elem := emulated.ValueOf[sw_bn254.ScalarField](bigIntValue)
 		publicInputElementsEmulated[i] = elem
 	}
-
-	recursionPublicInputs := recursion.Witness[sw_bn254.ScalarField]{
-		Public: publicInputElementsEmulated,
-	}
-
-	// Create placeholders
-	var placeholders *GnarkRecursionPlaceholders
-	if fixedVk {
-		placeholders, err = createPlaceholdersForRecursionWithFixedVk(gnarkVk, len(publicInputs))
-	} else {
-		placeholders, err = createPlaceholdersForRecursion(gnarkVk, len(publicInputs))
-	}
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create placeholders for recursion: %w", err)
-	}
-
 	// Create assignments
 	assignments := &GnarkRecursionProof{
-		Proof:        recursionProof,
-		PublicInputs: recursionPublicInputs,
+		Proof: recursionProof,
+		PublicInputs: recursion.Witness[sw_bn254.ScalarField]{
+			Public: publicInputElementsEmulated,
+		},
 	}
 	if !fixedVk {
 		// Create the recursion types
 		recursionVk, err := recursion.ValueOfVerifyingKey[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl](gnarkVk)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to convert verification key to recursion verification key: %w", err)
+			return nil, fmt.Errorf("failed to convert verification key to recursion verification key: %w", err)
 		}
 		assignments.Vk = recursionVk
 	}
-
-	return assignments,
-		placeholders,
-		nil
+	return assignments, nil
 }
 
-// createPlaceholdersForRecursion creates placeholders for the recursion proof and verification key.
-// It returns a set of placeholders needed to define the recursive circuit.
-// Use this function when the verification key is fixed (defined as 'gnark:"-"').
-func createPlaceholdersForRecursionWithFixedVk(gnarkVk *groth16_bn254.VerifyingKey, numberOfPublicInputs int) (*GnarkRecursionPlaceholders, error) {
-	if gnarkVk == nil || numberOfPublicInputs < 0 {
+// PlaceholdersForRecursion creates placeholders for the recursion proof and
+// verification key. If fixedVk is true, the verification key is fixed and must
+// be defined as 'gnark:"-"' in the Circuit. It only needs the number of public
+// inputs and the circom verification key.
+func PlaceholdersForRecursion(circomVk *CircomVerificationKey, nPublicInputs int,
+	fixedVk bool) (*GnarkRecursionPlaceholders, error) {
+	// convert the verification key to recursion verification key
+	gnarkVk, err := ConvertVerificationKey(circomVk)
+	if err != nil {
+		return nil, err
+	}
+	// create the placeholder for the recursion circuit
+	if fixedVk {
+		return createPlaceholdersForRecursionWithFixedVk(gnarkVk, nPublicInputs)
+
+	}
+	return createPlaceholdersForRecursion(gnarkVk, nPublicInputs)
+}
+
+// createPlaceholdersForRecursion creates placeholders for the recursion proof
+// and verification key. It returns a set of placeholders needed to define the
+// recursive circuit. Use this function when the verification key is fixed
+// (defined as 'gnark:"-"').
+func createPlaceholdersForRecursionWithFixedVk(gnarkVk *groth16_bn254.VerifyingKey,
+	nPublicInputs int) (*GnarkRecursionPlaceholders, error) {
+	if gnarkVk == nil || nPublicInputs < 0 {
 		return nil, fmt.Errorf("invalid inputs to create placeholders for recursion")
 	}
 	placeholderVk, err := recursion.ValueOfVerifyingKeyFixed[sw_bn254.G1Affine, sw_bn254.G2Affine, sw_bn254.GTEl](gnarkVk)
@@ -94,7 +96,7 @@ func createPlaceholdersForRecursionWithFixedVk(gnarkVk *groth16_bn254.VerifyingK
 	}
 
 	placeholderWitness := recursion.Witness[sw_bn254.ScalarField]{
-		Public: make([]emulated.Element[sw_bn254.ScalarField], numberOfPublicInputs),
+		Public: make([]emulated.Element[sw_bn254.ScalarField], nPublicInputs),
 	}
 	placeholderProof := recursion.Proof[sw_bn254.G1Affine, sw_bn254.G2Affine]{}
 
@@ -105,11 +107,12 @@ func createPlaceholdersForRecursionWithFixedVk(gnarkVk *groth16_bn254.VerifyingK
 	}, nil
 }
 
-// createPlaceholdersForRecursion creates placeholders for the recursion proof and verification key.
-// It returns a set of placeholders needed to define the recursive circuit.
-// Use this function when the verification key is not fixed.
-func createPlaceholdersForRecursion(gnarkVk *groth16_bn254.VerifyingKey, numberOfPublicInputs int) (*GnarkRecursionPlaceholders, error) {
-	placeholders, err := createPlaceholdersForRecursionWithFixedVk(gnarkVk, numberOfPublicInputs)
+// createPlaceholdersForRecursion creates placeholders for the recursion proof
+// and verification key. It returns a set of placeholders needed to define the
+// recursive circuit. Use this function when the verification key is not fixed.
+func createPlaceholdersForRecursion(gnarkVk *groth16_bn254.VerifyingKey,
+	nPublicInputs int) (*GnarkRecursionPlaceholders, error) {
+	placeholders, err := createPlaceholdersForRecursionWithFixedVk(gnarkVk, nPublicInputs)
 	if err != nil {
 		return nil, err
 	}

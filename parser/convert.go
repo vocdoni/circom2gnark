@@ -8,9 +8,12 @@ import (
 	groth16_bn254 "github.com/consensys/gnark/backend/groth16/bn254"
 )
 
-// ConvertCircomToGnark converts a Circom proof, verification key, and public signals to the Gnark proof format.
-// The proof can be verified using the VerifyProof() function.
-func ConvertCircomToGnark(circomProof *CircomProof, circomVk *CircomVerificationKey, circomPublicSignals []string) (*GnarkProof, error) {
+// ConvertCircomToGnark converts a Circom proof, verification key, and public
+// signals to the Gnark proof format. The proof can be verified using the
+// VerifyProof() function.
+func ConvertCircomToGnark(circomVk *CircomVerificationKey,
+	circomProof *CircomProof, circomPublicSignals []string,
+) (*GnarkProof, error) {
 	// Convert public signals to field elements
 	publicInputs, err := ConvertPublicInputs(circomPublicSignals)
 	if err != nil {
@@ -34,7 +37,8 @@ func ConvertCircomToGnark(circomProof *CircomProof, circomVk *CircomVerification
 	}, nil
 }
 
-// ConvertPublicInputs parses an array of strings representing public inputs into a slice of bn254fr.Element.
+// ConvertPublicInputs parses an array of strings representing public inputs
+// into a slice of bn254fr.Element.
 func ConvertPublicInputs(publicSignals []string) ([]bn254fr.Element, error) {
 	publicInputs := make([]bn254fr.Element, len(publicSignals))
 	for i, s := range publicSignals {
@@ -74,7 +78,8 @@ func ConvertProof(snarkProof *CircomProof) (*groth16_bn254.Proof, error) {
 	return gnarkProof, nil
 }
 
-// ConvertVerificationKey converts a CircomVerificationKey into a Gnark-compatible VerifyingKey structure.
+// ConvertVerificationKey converts a CircomVerificationKey into a
+// Gnark-compatible VerifyingKey structure.
 func ConvertVerificationKey(snarkVk *CircomVerificationKey) (*groth16_bn254.VerifyingKey, error) {
 	// Parse vk_alpha_1 (G1 point)
 	alphaG1, err := stringToG1(snarkVk.VkAlpha1)
@@ -128,7 +133,8 @@ func ConvertVerificationKey(snarkVk *CircomVerificationKey) (*groth16_bn254.Veri
 	return vk, nil
 }
 
-// VerifyProof verifies the Gnark proof using the provided verification key and public inputs.
+// VerifyProof verifies the Gnark proof using the provided verification key and
+// public inputs.
 func VerifyProof(proof *GnarkProof) (bool, error) {
 	// Verify the proof
 	err := groth16_bn254.Verify(proof.Proof, proof.VerifyingKey, proof.PublicInputs)
