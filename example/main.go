@@ -174,9 +174,51 @@ func main() {
 	err = groth16.Verify(proof, vk, publicWitness)
 	if err != nil {
 		fmt.Printf("Verification failed: %v\n", err)
-		return
+	} else {
+		fmt.Printf("Recursive proof verification succeeded! took %s\n", time.Since(startTime))
 	}
-	fmt.Printf("Recursive proof verification succeeded! took %s\n", time.Since(startTime))
+
+	// Convert proof, verifying key, and public inputs to the appropriate types
+	fmt.Printf("Transforming the proof to Circom format...\n")
+
+	// Convert the Gnark proof to Circom format.
+	circomProof, circomVk, circomPub, err := parser.ConvertGnarkToCircom(proof, vk, publicWitness)
+	if err != nil {
+		log.Fatalf("failed to convert Gnark proof to Circom proof: %v", err)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "circom_json")
+	if err != nil {
+		log.Fatalf("failed to create temporary directory: %v", err)
+	}
+
+	data, err := parser.MarshalCircomProofJSON(circomProof)
+	if err != nil {
+		log.Fatalf("failed to marshal Circom proof: %v", err)
+	}
+	if err := os.WriteFile(fmt.Sprintf("%s/proof.json", tmpDir), data, 0644); err != nil {
+
+		log.Fatalf("failed to write Circom proof: %v", err)
+	}
+
+	data, err = parser.MarshalCircomVerificationKeyJSON(circomVk)
+	if err != nil {
+		log.Fatalf("failed to marshal Circom verification key: %v", err)
+	}
+	if err := os.WriteFile(fmt.Sprintf("%s/vkey.json", tmpDir), data, 0644); err != nil {
+		log.Fatalf("failed to write Circom verification key: %v", err)
+	}
+
+	data, err = parser.MarshalCircomPublicSignalsJSON(circomPub)
+	if err != nil {
+		log.Fatalf("failed to marshal Circom public signals: %v", err)
+	}
+	if err := os.WriteFile(fmt.Sprintf("%s/public_signals.json", tmpDir), data, 0644); err != nil {
+		log.Fatalf("failed to write Circom public signals: %v", err)
+	}
+
+	fmt.Printf("To verify run: snarkjs groth16 verify %s/vkey.json %s/public_signals.json %s/proof.json\n", tmpDir, tmpDir, tmpDir)
+	fmt.Println("All done!")
 }
 
 // CompileCircuit compiles the circuit, generates the proving and verifying keys, and writes them to files

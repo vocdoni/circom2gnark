@@ -136,7 +136,6 @@ func ConvertVerificationKey(snarkVk *CircomVerificationKey) (*groth16_bn254.Veri
 // VerifyProof verifies the Gnark proof using the provided verification key and
 // public inputs.
 func VerifyProof(proof *GnarkProof) (bool, error) {
-	// Verify the proof
 	err := groth16_bn254.Verify(proof.Proof, proof.VerifyingKey, proof.PublicInputs)
 	if err != nil {
 		return false, fmt.Errorf("proof verification failed: %v", err)

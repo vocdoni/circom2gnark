@@ -68,6 +68,7 @@ func aggregateProofToBn254(proof *innerProof, vkInner groth16.VerifyingKey, ccsI
 	if err != nil {
 		log.Fatalf("Failed to create public witness: %v", err)
 	}
+
 	fmt.Println("Verifying...")
 	startTime = time.Now()
 	err = groth16.Verify(proof2, vk, publicWitness)

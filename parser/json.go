@@ -36,3 +36,19 @@ func UnmarshalCircomPublicSignalsJSON(data []byte) ([]string, error) {
 	}
 	return publicSignals, nil
 }
+
+// MarshalCircomProofJSON marshals the given CircomProof into pretty‑printed JSON.
+func MarshalCircomProofJSON(proof *CircomProof) ([]byte, error) {
+	return json.MarshalIndent(proof, "", "  ")
+}
+
+// MarshalCircomVerificationKeyJSON marshals the given CircomVerificationKey into pretty‑printed JSON.
+func MarshalCircomVerificationKeyJSON(vk *CircomVerificationKey) ([]byte, error) {
+	return json.MarshalIndent(vk, "", "  ")
+}
+
+// MarshalCircomPublicSignalsJSON marshals the given public signals (slice of strings)
+// into pretty‑printed JSON.
+func MarshalCircomPublicSignalsJSON(publicSignals []string) ([]byte, error) {
+	return json.MarshalIndent(publicSignals, "", "  ")
+}
