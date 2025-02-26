@@ -1,110 +1,19 @@
 package test
 
 import (
-	"bytes"
-	"fmt"
-	"math/big"
 	"os"
 	"testing"
 
 	"github.com/consensys/gnark-crypto/ecc"
-	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/consensys/gnark/backend/groth16"
 	groth16_bn254 "github.com/consensys/gnark/backend/groth16/bn254"
-	"github.com/consensys/gnark/backend/witness"
-	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
-	"github.com/consensys/gnark/std/algebra"
 	"github.com/consensys/gnark/std/algebra/emulated/sw_bn254"
-	"github.com/consensys/gnark/std/math/emulated"
 	stdgroth16 "github.com/consensys/gnark/std/recursion/groth16"
 	"github.com/vocdoni/circom2gnark/parser"
 )
-
-// --- Debug Helper Functions ---
-
-func printG1(label string, p *bn254.G1Affine) {
-	x := p.X.BigInt(new(big.Int))
-	y := p.Y.BigInt(new(big.Int))
-	fmt.Printf("%s:\n  X = %s\n  Y = %s\n", label, x.String(), y.String())
-}
-
-func printG2(label string, p *bn254.G2Affine) {
-	x0 := p.X.A0.BigInt(new(big.Int))
-	x1 := p.X.A1.BigInt(new(big.Int))
-	y0 := p.Y.A0.BigInt(new(big.Int))
-	y1 := p.Y.A1.BigInt(new(big.Int))
-	fmt.Printf("%s:\n  X.A0 = %s\n  X.A1 = %s\n  Y.A0 = %s\n  Y.A1 = %s\n",
-		label, x0.String(), x1.String(), y0.String(), y1.String())
-}
-
-// --- Inner and Outer Circuit Definitions ---
-
-// InnerCircuitNative proves P*Q == N with N public.
-type InnerCircuitNative struct {
-	P, Q frontend.Variable
-	N    frontend.Variable `gnark:",public"`
-}
-
-func (c *InnerCircuitNative) Define(api frontend.API) error {
-	res := api.Mul(c.P, c.Q)
-	api.AssertIsEqual(res, c.N)
-	api.AssertIsDifferent(c.P, 1)
-	api.AssertIsDifferent(c.Q, 1)
-	return nil
-}
-
-// computeInnerProof compiles, sets up, assigns, proves, and verifies the inner circuit.
-func computeInnerProof(field, outer *big.Int) (constraint.ConstraintSystem, groth16.VerifyingKey, witness.Witness, groth16.Proof) {
-	innerCcs, err := frontend.Compile(field, r1cs.NewBuilder, &InnerCircuitNative{})
-	if err != nil {
-		panic(fmt.Sprintf("inner circuit compilation failed: %v", err))
-	}
-	innerPK, innerVK, err := groth16.Setup(innerCcs)
-	if err != nil {
-		panic(fmt.Sprintf("inner circuit setup failed: %v", err))
-	}
-
-	innerAssignment := &InnerCircuitNative{
-		P: 3,
-		Q: 5,
-		N: 15,
-	}
-	innerWitness, err := frontend.NewWitness(innerAssignment, field)
-	if err != nil {
-		panic(fmt.Sprintf("creating inner witness failed: %v", err))
-	}
-	innerProof, err := groth16.Prove(innerCcs, innerPK, innerWitness, stdgroth16.GetNativeProverOptions(outer, field))
-	if err != nil {
-		panic(fmt.Sprintf("inner proving failed: %v", err))
-	}
-	innerPubWitness, err := innerWitness.Public()
-	if err != nil {
-		panic(fmt.Sprintf("getting inner public witness failed: %v", err))
-	}
-	err = groth16.Verify(innerProof, innerVK, innerPubWitness, stdgroth16.GetNativeVerifierOptions(outer, field))
-	if err != nil {
-		panic(fmt.Sprintf("inner proof verification failed: %v", err))
-	}
-	return innerCcs, innerVK, innerPubWitness, innerProof
-}
-
-// OuterCircuit verifies an inner Groth16 proof using recursion.
-type OuterCircuit[FR emulated.FieldParams, G1El algebra.G1ElementT, G2El algebra.G2ElementT, GtEl algebra.GtElementT] struct {
-	Proof        stdgroth16.Proof[G1El, G2El]
-	VerifyingKey stdgroth16.VerifyingKey[G1El, G2El, GtEl]
-	InnerWitness stdgroth16.Witness[FR]
-}
-
-func (c *OuterCircuit[FR, G1El, G2El, GtEl]) Define(api frontend.API) error {
-	verifier, err := stdgroth16.NewVerifier[FR, G1El, G2El, GtEl](api)
-	if err != nil {
-		return fmt.Errorf("new verifier: %w", err)
-	}
-	return verifier.AssertProof(c.VerifyingKey, c.Proof, c.InnerWitness)
-}
 
 func TestRecursionToCircom_Debug(t *testing.T) {
 	// Compute the inner Groth16 proof (proving 3*5==15).
@@ -129,6 +38,9 @@ func TestRecursionToCircom_Debug(t *testing.T) {
 		InnerWitness: circuitWitness,
 		Proof:        circuitProof,
 		VerifyingKey: circuitVK,
+		DummyInput1:  1,
+		DummyInput2:  1,
+		DummyInput3:  1,
 	}
 
 	// Create a placeholder outer circuit (to deduce public input sizes).
@@ -178,15 +90,6 @@ func TestRecursionToCircom_Debug(t *testing.T) {
 		t.Fatalf("failed to precompute verification key: %v", err)
 	}
 
-	// DEBUG: Print raw verifying key fields.
-	fmt.Println("----- Verifying Key Debug Info -----")
-	printG1("vk.G1.Alpha", &v.G1.Alpha)
-	printG2("vk.G2.Beta", &v.G2.Beta)
-	printG2("vk.G2.Gamma", &v.G2.Gamma)
-	printG2("vk.G2.Delta", &v.G2.Delta)
-	for i, pt := range v.G1.K {
-		printG1(fmt.Sprintf("vk.G1.K[%d]", i), &pt)
-	}
 	// Log lengths of public input witness and IC array.
 	vec, ok := publicWitness.Vector().(fr.Vector)
 	if !ok {
@@ -216,22 +119,10 @@ func TestRecursionToCircom_Debug(t *testing.T) {
 	}
 
 	// Write JSON files and exported Solidity verifier to a temporary directory.
-	tempDir, err := os.MkdirTemp("", "circom_json_recursion_debug")
+	tempDir, err := os.MkdirTemp("", "circom2gnark_recursion_test")
 	if err != nil {
 		t.Fatalf("failed to create temp directory: %v", err)
 	}
-
-	// Export Solidity verifier.
-	fd, err := os.OpenFile(tempDir+"/vk.sol", os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Fatalf("failed to open vk.sol: %v", err)
-	}
-	buf := bytes.NewBuffer(nil)
-	if err := v.ExportSolidity(buf); err != nil {
-		t.Fatalf("failed to export vk.sol: %v", err)
-	}
-	fd.Write(buf.Bytes())
-	fd.Close()
 
 	// Write JSON files to the temporary directory.
 	t.Logf("Writing debug Circom JSON files to %s", tempDir)
